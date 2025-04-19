@@ -1,7 +1,7 @@
 import requests
 import os
 from bs4 import BeautifulSoup
-from scraping_configs import user_agent
+from scraping_configs import user_agent, EXAM_KEY, get_latest_semester, progress_semester
 
 def get_plan_no(year, semester):
     print(f"Fetching plan number for year {year} semester {semester}...")
@@ -44,11 +44,10 @@ def get_plan_no(year, semester):
         if label.upper() == target_label:
             print(f"Found matching plan_no: {plan_no} for {target_label}\n")
             return plan_no
+    return None
 
-    raise Exception(f"Could not find matching plan_no for {target_label}")
 
-
-def fetch_exam_data(plan_no, year, semester, save_path="data/exams.html"):
+def fetch_exam_data_with_plan(plan_no, year, semester, save_folder="raw", file_name="exams.html"):
     # Create the payload (equivalent to $request array)
     payload = {
         "p_exam_dt": "",
@@ -68,17 +67,32 @@ def fetch_exam_data(plan_no, year, semester, save_path="data/exams.html"):
     url = "https://wis.ntu.edu.sg/webexe/owa/exam_timetable_und.get_detail"
     response = requests.post(url, data=payload)
 
-    # Ensure the output directory exists
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    # Save the response HTML
+    # Save html file
+    dir = os.path.join(save_folder, f"{year}_{semester}")
+    if save_folder != "":
+        os.makedirs(dir, exist_ok=True)
+    save_path = os.path.join(dir, file_name)
     with open(save_path, "w", encoding="utf-8") as f:
         f.write(response.text)
-
     print(f"Saved to {save_path}")
+
     return response.text
-year = 2024
-semester = 2
-plan_no = get_plan_no(year, semester)
-print(f"Plan No for year {year} sem {semester}: {plan_no}")
-fetch_exam_data(plan_no, year, semester)
+
+def fetch_exam_data(year, semester):
+    plan_no = get_plan_no(year, semester)
+    if plan_no is None:
+        print(f"Failed to find plan number for year {year} semester {semester}")
+        return None
+    return fetch_exam_data_with_plan(plan_no, year, semester)
+
+if __name__ == "__main__":
+    latest_sem = get_latest_semester(EXAM_KEY)
+    next_sem = latest_sem.next()
+    print(f"Trying to fetch exam data for {next_sem}...")
+    exam_data_html = fetch_exam_data(next_sem.year, next_sem.semester)
+    if exam_data_html is None:
+        print(f"Failed to fetch exam data for {next_sem}, no new data available")
+        exit(1)
+    print(f"Success! Fetched exam data for {next_sem}")
+    progress_semester(EXAM_KEY)
+    print(f"Progressed to {next_sem}")
